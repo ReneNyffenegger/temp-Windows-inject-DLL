@@ -3,52 +3,17 @@
 //
 
 #include <windows.h>
-#include <tlhelp32.h>
 
 #include <stdio.h>
 
+#include "win-proc.h"
 
-DWORD procNameToId(char* name) {
 
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-
-    if (snap == INVALID_HANDLE_VALUE) {
-       printf("CreateToolhelp32Snapshot -> invalid\n");
-    }
-
-    PROCESSENTRY32 ProcEntry = { sizeof(ProcEntry) };
-
-    BOOL MoreMods = Process32First(snap, &ProcEntry);
-    for (; MoreMods; MoreMods = Process32Next(snap, &ProcEntry)) {
-     
-//     printf("%s\n", ProcEntry.szExeFile);
-
-       if (! strncmp(name, ProcEntry.szExeFile, 255)) {
-//        printf("Found %s\n", ProcEntry.szExeFile);
-          return ProcEntry.th32ProcessID; 
-       }
-
-//      std::tstring CurrentProcess(ProcEntry.szExeFile);
-//          CurrentProcess = toLower(CurrentProcess);
-//      Found = (CurrentProcess == Name);
-//      if (Found) break;
-    }
-
-    return 0;
-
-}
 
 
 void injectDll(DWORD procId, char* modulePath) {
 
-     HANDLE process = OpenProcess (
-         PROCESS_QUERY_INFORMATION |   // Required by Alpha
-         PROCESS_CREATE_THREAD     |   // For CreateRemoteThread
-         PROCESS_VM_OPERATION      |   // For VirtualAllocEx/VirtualFreeEx
-         PROCESS_VM_WRITE,             // For WriteProcessMemory
-         FALSE,
-         procId
-     );
+     HANDLE process = procIdToHandle(procId);
 
      if (!process) {
         printf("could not open process\n");
@@ -81,7 +46,7 @@ void injectDll(DWORD procId, char* modulePath) {
      }
 
      PTHREAD_START_ROUTINE addrLoadLibrary = 
-    (PTHREAD_START_ROUTINE) GetProcAddress(hKernel32, "LoadLibraryW");
+    (PTHREAD_START_ROUTINE) GetProcAddress(hKernel32, "LoadLibraryA");
 
 
      if (!addrLoadLibrary) {
@@ -102,7 +67,7 @@ void injectDll(DWORD procId, char* modulePath) {
 
   // Get thread exit code
       DWORD ExitCode;
-      if (!GetExitCodeThread(thread,&ExitCode)) {
+      if (!GetExitCodeThread(thread, &ExitCode)) {
         printf("! get exit code\n");
         return;
       }
@@ -112,15 +77,14 @@ void injectDll(DWORD procId, char* modulePath) {
         printf("! call to LoadLibraryW failed\n");
         return;
      }
-
 }
 
 
-int main() {
+int main(int argc, char* argv[]) {
 
     DWORD procID = 0;
 
-    procID = procNameToId("notepad.exe");
+    procID = procNameToId(argv[1]);
 
     if (!procID) {
        printf("Process not found\n");
@@ -129,6 +93,6 @@ int main() {
     printf("ProcID %d\n", procID);
 
 
-   
+    injectDll(procID, argv[2]);
 
 }
